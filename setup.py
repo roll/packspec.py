@@ -21,7 +21,7 @@ def read(*paths):
 PACKAGE = 'packspec'
 INSTALL_REQUIRES = [
     'click>=6.0,<7.0',
-    'pyyaml>3.1<4',
+    'pyyaml>=3.1,<4.0',
 ]
 TESTS_REQUIRE = [
     'pylama',
