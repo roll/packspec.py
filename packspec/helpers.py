@@ -120,7 +120,7 @@ def test_feature(feature, variables):
         result = source
         if feature['params'] is not None:
             result = source(*feature['params'])
-    except Exception as exception:
+    except Exception:
         result = 'ERROR'
     # Assign
     if feature['target'] is not None:
