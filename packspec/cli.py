@@ -65,7 +65,7 @@ def parse_spec(spec):
     try:
         feature = parse_feature(contents[0])
         package = feature['result']
-        assert feature['source'][0] == 'PACKAGE'
+        assert feature['source'] == 'PACKAGE'
         assert not feature['skip']
     except Exception:
         return None
@@ -92,8 +92,6 @@ def parse_feature(feature):
     # Left side
     match = re.match(r'^(?:([^=]*)=)?([^:]*)(?::(.*))*$', left)
     target, source, skip = match.groups()
-    if source:
-        source = source.split('.')
     if skip:
         filters = skip.split(':')
         skip = '!py' in filters or not ('!' in skip or 'py' in filters)
@@ -104,7 +102,7 @@ def parse_feature(feature):
         result = right[-1]
         params = right[:-1]
     # Text repr
-    text = '.'.join(source)
+    text = source
     if target:
         text = '%s=%s' % (target, text)
     if params:
@@ -147,7 +145,7 @@ def test_feature(feature, scope):
     # Execute
     try:
         source = scope
-        for name in feature['source']:
+        for name in feature['source'].split('.'):
             getter = dict.get if isinstance(source, dict) else getattr
             source = getter(source, name)
         result = source
