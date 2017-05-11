@@ -65,7 +65,7 @@ def parse_spec(spec):
     try:
         feature = parse_feature(contents[0])
         package = feature['result']
-        assert feature['source'] == 'PACKAGE'
+        assert feature['property'] == 'PACKAGE'
         assert not feature['skip']
     except Exception:
         return None
@@ -91,29 +91,29 @@ def parse_feature(feature):
     left, right = list(feature.items())[0]
     # Left side
     match = re.match(r'^(?:([^=]*)=)?([^:]*)(?::(.*))*$', left)
-    target, source, skip = match.groups()
+    assign, property, skip = match.groups()
     if skip:
         filters = skip.split(':')
         skip = '!py' in filters or not ('!' in skip or 'py' in filters)
     # Right side
     result = right
-    params = None
+    arguments = None
     if isinstance(right, list):
         result = right[-1]
-        params = right[:-1]
+        arguments = right[:-1]
     # Text repr
-    text = source
-    if target:
-        text = '%s=%s' % (target, text)
-    if params:
-        text = '%s(%s)' % (text, ', '.join(map(repr, params)))
-    if not target:
+    text = property
+    if assign:
+        text = '%s=%s' % (assign, text)
+    if arguments:
+        text = '%s(%s)' % (text, ', '.join(map(repr, arguments)))
+    if not assign:
         text = '%s == %s' % (text, repr(result))
     return {
-        'source': source,
-        'params': params,
+        'assign': assign,
+        'property': property,
+        'arguments': arguments,
         'result': result,
-        'target': target,
         'text': text,
         'skip': skip,
     }
@@ -144,18 +144,29 @@ def test_feature(feature, scope):
         return True
     # Execute
     try:
-        source = scope
-        for name in feature['source'].split('.'):
-            getter = dict.get if isinstance(source, dict) else getattr
-            source = getter(source, name)
-        result = source
-        if feature['params'] is not None:
-            result = source(*feature['params'])
+        owner = scope
+        parts = feature['property'].split('.')
+        for name in parts[:-1]:
+            owner = get_property(owner, name)
+        property = get_property(owner, parts[-1])
+        # Call property
+        if feature['arguments'] is not None:
+            arguments = []
+            for argument in feature['arguments']:
+                arguments.append(argument)
+            result = property(*arguments)
+        # Get property
+        elif property is not None:
+            result = property
+        # Set property
+        else:
+            result = feature['result']
+            set_property(owner, parts[-1], result)
     except Exception:
         result = 'ERROR'
     # Assign
-    if feature['target'] is not None:
-        scope[feature['target']] = result
+    if feature['assign'] is not None:
+        scope[feature['assign']] = result
     # Verify
     success = result == feature['result'] or (result != 'ERROR' and feature['result'] == 'ANY')
     if success:
@@ -163,6 +174,19 @@ def test_feature(feature, scope):
     else:
         print('(-) %s # %s' % (feature['text'], repr(result)))
     return success
+
+
+def get_property(owner, name):
+    if isinstance(owner, dict):
+        return owner.get(name)
+    return getattr(owner, name, None)
+
+
+def set_property(owner, name, value):
+    if isinstance(owner, dict):
+        owner[name] = value
+        return
+    return setter(owner, name, value)
 
 
 # Main program
