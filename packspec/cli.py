@@ -47,15 +47,15 @@ def parse_specs(path):
             spec = parse_spec(filecont)
             if not spec:
                 continue
-            if spec['package'] not in specmap:
-                specmap[spec['package']] = spec
+            if spec['scope']['PACKAGE'] not in specmap:
+                specmap[spec['scope']['PACKAGE']] = spec
             else:
-                specmap[spec['package']]['features'].extend(spec['features'])
+                specmap[spec['scope']['PACKAGE']]['features'].extend(spec['features'])
     # Specs
     specs = [specmap[package] for package in sorted(specmap)]
     for spec in specs:
         for name, hook in hookmap.items():
-            spec['variables'][name] = partial(hook, spec['variables'])
+            spec['scope'][name] = partial(hook, spec['scope'])
     return specs
 
 
@@ -73,51 +73,50 @@ def parse_spec(spec):
     for feature in contents:
         feature = parse_feature(feature)
         features.append(feature)
-    # Variables
-    variables = {'PACKAGE': package}
+    # Scope
+    scope = {'PACKAGE': package}
     module = importlib.import_module(package)
     for name in dir(module):
         if name.startswith('_'):
             continue
-        variables[name] = getattr(module, name)
+        scope[name] = getattr(module, name)
     return {
-        'package': package,
         'features': features,
-        'variables': variables,
+        'scope': scope,
     }
 
 
 def parse_feature(feature):
     left, right = list(feature.items())[0]
     # Left side
-    match = re.match(r'^(?:([^=]*)=)?([^:]*)(?::{([^{}]*)})?$', left)
-    target, source, filter = match.groups()
+    match = re.match(r'^(?:([^=]*)=)?([^:]*)(?::(.*))*$', left)
+    target, source, skip = match.groups()
     if source:
         source = source.split('.')
-    if filter:
-        rules = filter.split(',')
-        filter = '!py' in rules or not ('!' in filter or 'py' in rules)
+    if skip:
+        filters = skip.split(':')
+        skip = '!py' in filters or not ('!' in skip or 'py' in filters)
     # Right side
     result = right
     params = None
     if isinstance(right, list):
         result = right[-1]
         params = right[:-1]
-    # String repr
-    string = '.'.join(source)
+    # Text repr
+    text = '.'.join(source)
     if target:
-        string = '%s=%s' % (target, string)
+        text = '%s=%s' % (target, text)
     if params:
-        string = '%s(%s)' % (string, ', '.join(map(repr, params)))
+        text = '%s(%s)' % (text, ', '.join(map(repr, params)))
     if not target:
-        string = '%s == %s' % (string, repr(result))
+        text = '%s == %s' % (text, repr(result))
     return {
-        'string': string,
         'source': source,
         'params': params,
         'result': result,
         'target': target,
-        'filter': filter,
+        'text': text,
+        'skip': skip,
     }
 
 
@@ -133,20 +132,20 @@ def test_spec(spec):
     passed = 0
     amount = len(spec['features'])
     for feature in spec['features']:
-        passed += test_feature(feature, spec['variables'])
-    print('%s: %s/%s' % (spec['package'], passed, amount))
+        passed += test_feature(feature, spec['scope'])
+    print('%s: %s/%s' % (spec['scope']['PACKAGE'], passed, amount))
     success = (passed == amount)
     return success
 
 
-def test_feature(feature, variables):
-    # Filter
-    if feature['filter']:
-        print('(#) %s' % feature['string'])
+def test_feature(feature, scope):
+    # Skip
+    if feature['skip']:
+        print('(#) %s' % feature['text'])
         return True
     # Execute
     try:
-        source = variables
+        source = scope
         for name in feature['source']:
             getter = dict.get if isinstance(source, dict) else getattr
             source = getter(source, name)
@@ -157,13 +156,13 @@ def test_feature(feature, variables):
         result = 'ERROR'
     # Assign
     if feature['target'] is not None:
-        variables[feature['target']] = result
+        scope[feature['target']] = result
     # Verify
     success = result == feature['result'] or (result != 'ERROR' and feature['result'] == 'ANY')
     if success:
-        print('(+) %s' % feature['string'])
+        print('(+) %s' % feature['text'])
     else:
-        print('(-) %s # %s' % (feature['string'], repr(result)))
+        print('(-) %s # %s' % (feature['text'], repr(result)))
     return success
 
 
