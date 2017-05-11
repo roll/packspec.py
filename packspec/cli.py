@@ -66,6 +66,7 @@ def parse_spec(spec):
         feature = parse_feature(contents[0])
         package = feature['result']
         assert feature['source'][0] == 'PACKAGE'
+        assert not feature['skip']
     except Exception:
         return None
     # Features
