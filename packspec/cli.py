@@ -170,6 +170,8 @@ def test_feature(feature, scope):
             result = property
         # Set property
         else:
+            if names[-1].isupper():
+                raise Exception('Can\'t update the constant "%s"' % names[-1])
             result = feature['result']
             set_property(owner, names[-1], result)
     except Exception:
