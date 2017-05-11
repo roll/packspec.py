@@ -10,6 +10,7 @@ import re
 import yaml
 import click
 import importlib
+from functools import partial
 
 
 # Module API
@@ -26,21 +27,35 @@ def cli(path):
 # Helpers
 
 def parse_specs(path):
-    specs = {}
+    # Maps
+    specmap = {}
+    hookmap = {}
     for root, dirnames, filenames in os.walk(path):
         for filename in filenames:
-            if not filename.endswith('.yml'):
+            if not filename.endswith('.yml') and filename != 'packspec.py':
                 continue
             filepath = os.path.join(root, filename)
             filecont = io.open(filepath, encoding='utf-8').read()
+            if filename == 'packspec.py':
+                scope = {}
+                exec(filecont, scope)
+                for name, attr in scope.items():
+                    if name.startswith('_'):
+                        continue
+                    hookmap[name] = attr
+                continue
             spec = parse_spec(filecont)
             if not spec:
                 continue
-            if spec['package'] not in specs:
-                specs[spec['package']] = spec
+            if spec['package'] not in specmap:
+                specmap[spec['package']] = spec
             else:
-                specs[spec['package']]['features'].extend(spec['features'])
-    specs = [specs[package] for package in sorted(specs)]
+                specmap[spec['package']]['features'].extend(spec['features'])
+    # Specs
+    specs = [specmap[package] for package in sorted(specmap)]
+    for spec in specs:
+        for name, hook in hookmap.items():
+            spec['variables'][name] = partial(hook, spec['variables'])
     return specs
 
 
