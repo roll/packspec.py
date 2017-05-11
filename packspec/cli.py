@@ -105,8 +105,14 @@ def parse_feature(feature):
     text = property
     if assign:
         text = '%s=%s' % (assign, text)
-    if arguments:
-        text = '%s(%s)' % (text, ', '.join(map(repr, arguments)))
+    if arguments is not None:
+        items = []
+        for argument in arguments:
+            item = parse_interpolation(argument)
+            if not item:
+                item = repr(argument)
+            items.append(item)
+        text = '%s(%s)' % (text, ', '.join(items))
     if not assign:
         text = '%s == %s' % (text, repr(result))
     return {
@@ -145,14 +151,18 @@ def test_feature(feature, scope):
     # Execute
     try:
         owner = scope
-        parts = feature['property'].split('.')
-        for name in parts[:-1]:
+        names = feature['property'].split('.')
+        for name in names[:-1]:
             owner = get_property(owner, name)
-        property = get_property(owner, parts[-1])
+        property = get_property(owner, names[-1])
         # Call property
         if feature['arguments'] is not None:
             arguments = []
             for argument in feature['arguments']:
+                # Property interpolation
+                name = parse_interpolation(argument)
+                if name:
+                    argument = get_property(scope, name)
                 arguments.append(argument)
             result = property(*arguments)
         # Get property
@@ -161,7 +171,7 @@ def test_feature(feature, scope):
         # Set property
         else:
             result = feature['result']
-            set_property(owner, parts[-1], result)
+            set_property(owner, names[-1], result)
     except Exception:
         result = 'ERROR'
     # Assign
@@ -174,6 +184,14 @@ def test_feature(feature, scope):
     else:
         print('(-) %s # %s' % (feature['text'], repr(result)))
     return success
+
+
+def parse_interpolation(argument):
+    if isinstance(argument, dict) and len(argument) == 1:
+        left, right = list(argument.items())[0]
+        if right is None:
+            return left
+    return None
 
 
 def get_property(owner, name):
