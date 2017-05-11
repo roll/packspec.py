@@ -49,7 +49,7 @@ setup(
     zip_safe=False,
     long_description=README,
     description='packspec-py',
-    author='Engeny Karev',
+    author='Evgeny Karev',
     author_email='eskarev@gmail.com',
     url='https://github.com/packspec/packspec-py',
     license='MIT',
