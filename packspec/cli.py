@@ -11,6 +11,7 @@ import json
 import yaml
 import click
 import importlib
+from emoji import emojize
 from functools import partial
 
 
@@ -128,6 +129,7 @@ def parse_feature(feature):
 
 def test_specs(specs):
     success = True
+    click.echo(click.style('Python', bold=True))
     for spec in specs:
         spec_success = test_spec(spec)
         success = success and spec_success
@@ -137,17 +139,21 @@ def test_specs(specs):
 def test_spec(spec):
     passed = 0
     amount = len(spec['features'])
+    click.echo('----')
     for feature in spec['features']:
         passed += test_feature(feature, spec['scope'])
-    print('%s: %s/%s' % (spec['scope']['PACKAGE'], passed, amount))
     success = (passed == amount)
+    click.echo('----')
+    click.echo(click.style('%s: %s/%s' % (spec['scope']['PACKAGE'], passed, amount), bold=True))
     return success
 
 
 def test_feature(feature, scope):
     # Skip
     if feature['skip']:
-        print('(#) %s' % feature['text'])
+        message = click.style(emojize(' :question:  ', use_aliases=True), fg='yellow')
+        message += click.style('%s' % feature['text'])
+        click.echo(message)
         return True
     # Execute
     try:
@@ -183,9 +189,13 @@ def test_feature(feature, scope):
     # Verify
     success = result == feature['result'] or (result != 'ERROR' and feature['result'] == 'ANY')
     if success:
-        print('(+) %s' % feature['text'])
+        message = click.style(emojize(' :heavy_check_mark:  ', use_aliases=True), fg='green')
+        message += click.style('%s' % feature['text'])
+        click.echo(message)
     else:
-        print('(-) %s # %s' % (feature['text'], json.dumps(result)))
+        message = click.style(emojize(' :x:  ', use_aliases=True), fg='red')
+        message += click.style('%s # %s' % (feature['text'], json.dumps(result)))
+        click.echo(message)
     return success
 
 
