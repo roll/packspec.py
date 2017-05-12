@@ -29,6 +29,7 @@ def cli(path):
 # Helpers
 
 def parse_specs(path):
+
     # Maps
     specmap = {}
     hookmap = {}
@@ -49,10 +50,11 @@ def parse_specs(path):
             spec = parse_spec(filecont)
             if not spec:
                 continue
-            if spec['scope']['PACKAGE'] not in specmap:
-                specmap[spec['scope']['PACKAGE']] = spec
+            if spec['package'] not in specmap:
+                specmap[spec['package']] = spec
             else:
-                specmap[spec['scope']['PACKAGE']]['features'].extend(spec['features'])
+                specmap[spec['package']]['features'].extend(spec['features'])
+
     # Specs
     specs = [specmap[package] for package in sorted(specmap)]
     for spec in specs:
@@ -62,28 +64,33 @@ def parse_specs(path):
 
 
 def parse_spec(spec):
+
     # Package
     contents = yaml.load(spec)
     try:
         feature = parse_feature(contents[0])
         package = feature['result']
-        assert feature['property'] == 'PACKAGE'
+        assert feature['assign'] == 'PACKAGE'
         assert not feature['skip']
     except Exception:
         return None
+
     # Features
     features = []
     for feature in contents:
         feature = parse_feature(feature)
         features.append(feature)
+
     # Scope
-    scope = {'PACKAGE': package}
+    scope = {}
     module = importlib.import_module(package)
     for name in dir(module):
         if name.startswith('_'):
             continue
         scope[name] = getattr(module, name)
+
     return {
+        'package': package,
         'features': features,
         'scope': scope,
     }
@@ -91,22 +98,27 @@ def parse_spec(spec):
 
 def parse_feature(feature):
     left, right = list(feature.items())[0]
+
     # Left side
-    match = re.match(r'^(?:([^=]*)=)?([^:]*)(?::(.*))*$', left)
+    match = re.match(r'^(?:([^=]*)=)?([^:]*)?(?::(.*))*$', left)
     assign, property, skip = match.groups()
+    if not assign and not property:
+        raise Exception('Non-valid feature')
     if skip:
         filters = skip.split(':')
         skip = '!py' in filters or not ('!' in skip or 'py' in filters)
+
     # Right side
     result = right
     arguments = None
     if isinstance(right, list):
         result = right[-1]
         arguments = right[:-1]
+
     # Text repr
     text = property
     if assign:
-        text = '%s=%s' % (assign, text)
+        text = '%s = %s' % (assign, property or json.dumps(result))
     if arguments is not None:
         items = []
         for argument in arguments:
@@ -117,6 +129,7 @@ def parse_feature(feature):
         text = '%s(%s)' % (text, ', '.join(items))
     if not assign:
         text = '%s == %s' % (text, json.dumps(result))
+
     return {
         'assign': assign,
         'property': property,
@@ -144,49 +157,53 @@ def test_spec(spec):
         passed += test_feature(feature, spec['scope'])
     success = (passed == amount)
     click.echo('----')
-    click.echo(click.style('%s: %s/%s' % (spec['scope']['PACKAGE'], passed, amount), bold=True))
+    click.echo(click.style('%s: %s/%s' % (spec['package'], passed, amount), bold=True))
     return success
 
 
 def test_feature(feature, scope):
+
     # Skip
     if feature['skip']:
         message = click.style(emojize(' :question:  ', use_aliases=True), fg='yellow')
         message += click.style('%s' % feature['text'])
         click.echo(message)
         return True
+
     # Execute
-    try:
+    result = feature['result']
+    if feature['property']:
+        try:
+            owner = scope
+            names = feature['property'].split('.')
+            for name in names[:-1]:
+                owner = get_property(owner, name)
+            property = get_property(owner, names[-1])
+            if feature['arguments'] is not None:
+                arguments = []
+                for argument in feature['arguments']:
+                    # Property interpolation
+                    name = parse_interpolation(argument)
+                    if name:
+                        argument = get_property(scope, name)
+                    arguments.append(argument)
+                result = property(*arguments)
+            else:
+                result = property
+        except Exception:
+            result = 'ERROR'
+
+    # Assign
+    if feature['assign']:
         owner = scope
-        names = feature['property'].split('.')
+        names = feature['assign'].split('.')
         for name in names[:-1]:
             owner = get_property(owner, name)
-        property = get_property(owner, names[-1])
-        # Call property
-        if feature['arguments'] is not None:
-            arguments = []
-            for argument in feature['arguments']:
-                # Property interpolation
-                name = parse_interpolation(argument)
-                if name:
-                    argument = get_property(scope, name)
-                arguments.append(argument)
-            result = property(*arguments)
-        # Get property
-        elif property is not None:
-            result = property
-        # Set property
-        else:
-            if names[-1].isupper():
-                raise Exception('Can\'t update the constant "%s"' % names[-1])
-            result = feature['result']
-            set_property(owner, names[-1], result)
-    except Exception:
-        result = 'ERROR'
-    # Assign
-    if feature['assign'] is not None:
-        scope[feature['assign']] = result
-    # Verify
+        if get_property(owner, names[-1]) is not None and names[-1].isupper():
+            raise Exception('Can\'t update the constant "%s"' % names[-1])
+        set_property(owner, names[-1], result)
+
+    # Compare
     success = result == feature['result'] or (result != 'ERROR' and feature['result'] == 'ANY')
     if success:
         message = click.style(emojize(' :heavy_check_mark:  ', use_aliases=True), fg='green')
@@ -196,6 +213,7 @@ def test_feature(feature, scope):
         message = click.style(emojize(' :x:  ', use_aliases=True), fg='red')
         message += click.style('%s # %s' % (feature['text'], json.dumps(result)))
         click.echo(message)
+
     return success
 
 
