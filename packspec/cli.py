@@ -7,6 +7,7 @@ from __future__ import unicode_literals
 import io
 import os
 import re
+import json
 import yaml
 import click
 import importlib
@@ -110,11 +111,11 @@ def parse_feature(feature):
         for argument in arguments:
             item = parse_interpolation(argument)
             if not item:
-                item = repr(argument)
+                item = json.dumps(argument)
             items.append(item)
         text = '%s(%s)' % (text, ', '.join(items))
     if not assign:
-        text = '%s == %s' % (text, repr(result))
+        text = '%s == %s' % (text, json.dumps(result))
     return {
         'assign': assign,
         'property': property,
@@ -184,7 +185,7 @@ def test_feature(feature, scope):
     if success:
         print('(+) %s' % feature['text'])
     else:
-        print('(-) %s # %s' % (feature['text'], repr(result)))
+        print('(-) %s # %s' % (feature['text'], json.dumps(result)))
     return success
 
 
