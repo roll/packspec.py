@@ -142,7 +142,9 @@ def parse_feature(feature):
 
 def test_specs(specs):
     success = True
-    click.echo(click.style('Python', bold=True))
+    message = click.style(emojize('\n :small_blue_diamond:  ', use_aliases=True), fg='blue', bold=True)
+    message += click.style('Python\n', bold=True)
+    click.echo(message)
     for spec in specs:
         spec_success = test_spec(spec)
         success = success and spec_success
@@ -152,12 +154,14 @@ def test_specs(specs):
 def test_spec(spec):
     passed = 0
     amount = len(spec['features'])
-    click.echo('----')
     for feature in spec['features']:
         passed += test_feature(feature, spec['scope'])
     success = (passed == amount)
-    click.echo('----')
-    click.echo(click.style('%s: %s/%s' % (spec['package'], passed, amount), bold=True))
+    message = click.style(emojize('\n :heavy_check_mark:  ', use_aliases=True), fg='green', bold=True)
+    if not success:
+        message = click.style(emojize('\n :x:  ', use_aliases=True), fg='red', bold=True)
+    message += click.style('%s: %s/%s\n' % (spec['package'], passed, amount), bold=True)
+    click.echo(message)
     return success
 
 
