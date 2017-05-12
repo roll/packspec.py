@@ -207,7 +207,7 @@ def set_property(owner, name, value):
     if isinstance(owner, dict):
         owner[name] = value
         return
-    return setter(owner, name, value)
+    return setattr(owner, name, value)
 
 
 # Main program
