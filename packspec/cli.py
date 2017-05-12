@@ -186,7 +186,6 @@ def test_feature(feature, scope):
             if feature['arguments'] is not None:
                 arguments = []
                 for argument in feature['arguments']:
-                    # Property interpolation
                     name = parse_interpolation(argument)
                     if name:
                         argument = get_property(scope, name)
