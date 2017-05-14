@@ -7,6 +7,8 @@ from __future__ import unicode_literals
 import io
 import os
 import re
+import six
+import copy
 import json
 import yaml
 import click
@@ -30,36 +32,41 @@ def cli(path):
 
 def parse_specs(path):
 
-    # Maps
+    # Specs
     specmap = {}
+    for root, dirnames, filenames in os.walk(path):
+        for filename in filenames:
+            if filename.endswith('.yml'):
+                filepath = os.path.join(root, filename)
+                filecont = io.open(filepath, encoding='utf-8').read()
+                spec = parse_spec(filecont)
+                if not spec:
+                    continue
+                if spec['package'] not in specmap:
+                    specmap[spec['package']] = spec
+                else:
+                    specmap[spec['package']]['features'].extend(spec['features'])
+
+    # Hooks
     hookmap = {}
     for root, dirnames, filenames in os.walk(path):
         for filename in filenames:
-            if not filename.endswith('.yml') and filename != 'packspec.py':
-                continue
-            filepath = os.path.join(root, filename)
-            filecont = io.open(filepath, encoding='utf-8').read()
             if filename == 'packspec.py':
+                filepath = os.path.join(root, filename)
+                filecont = io.open(filepath, encoding='utf-8').read()
                 scope = {}
                 exec(filecont, scope)
                 for name, attr in scope.items():
                     if name.startswith('_'):
                         continue
                     hookmap[name] = attr
-                continue
-            spec = parse_spec(filecont)
-            if not spec:
-                continue
-            if spec['package'] not in specmap:
-                specmap[spec['package']] = spec
-            else:
-                specmap[spec['package']]['features'].extend(spec['features'])
 
-    # Specs
+    # Result
     specs = [specmap[package] for package in sorted(specmap)]
     for spec in specs:
         for name, hook in hookmap.items():
             spec['scope'][name] = partial(hook, spec['scope'])
+
     return specs
 
 
@@ -124,15 +131,10 @@ def parse_feature(feature):
     if assign:
         text = '%s = %s' % (assign, property or json.dumps(result))
     if arguments is not None:
-        items = []
-        for argument in arguments:
-            item = parse_interpolation(argument)
-            if not item:
-                item = json.dumps(argument)
-            items.append(item)
-        text = '%s(%s)' % (text, ', '.join(items))
+        text = '%s(%s)' % (text, ', '.join(map(json.dumps, arguments)))
     if not assign:
         text = '%s == %s' % (text, json.dumps(result))
+    text = re.sub(r'"\$([^"]*)"', r'\1', text)
 
     return {
         'skip': skip,
@@ -179,22 +181,15 @@ def test_feature(feature, scope):
         return True
 
     # Execute
+    feature = dereference_feature(feature, scope)
     result = feature['result']
     if feature['property']:
         try:
-            owner = scope
-            names = feature['property'].split('.')
-            for name in names[:-1]:
-                owner = get_property(owner, name)
-            property = get_property(owner, names[-1])
+            property = scope
+            for name in feature['property'].split('.'):
+                property = get_property(property, name)
             if feature['arguments'] is not None:
-                arguments = []
-                for argument in feature['arguments']:
-                    name = parse_interpolation(argument)
-                    if name:
-                        argument = get_property(scope, name)
-                    arguments.append(argument)
-                result = property(*arguments)
+                result = property(*feature['arguments'])
             else:
                 result = property
         except Exception:
@@ -224,12 +219,26 @@ def test_feature(feature, scope):
     return success
 
 
-def parse_interpolation(argument):
-    if isinstance(argument, dict) and len(argument) == 1:
-        left, right = list(argument.items())[0]
-        if right is None:
-            return left
-    return None
+def dereference_feature(feature, scope):
+    feature = copy.deepcopy(feature)
+    if feature['arguments'] is not None:
+        feature['arguments'] = dereference_value(feature['arguments'], scope)
+    feature['result'] = dereference_value(feature['result'], scope)
+    return feature
+
+
+def dereference_value(value, scope):
+    value = copy.deepcopy(value)
+    if isinstance(value, six.string_types):
+        if value.startswith('$'):
+            value = scope[value[1:]]
+    elif isinstance(value, list):
+        for index, item in enumerate(list(value)):
+            value[index] = dereference_value(item, scope)
+    elif isinstance(value, dict):
+        for key, item in list(value.items()):
+            value[key] = dereference_value(item, scope)
+    return value
 
 
 def get_property(owner, name):
