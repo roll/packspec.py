@@ -15,6 +15,7 @@ import click
 import importlib
 from emoji import emojize
 from functools import partial
+from collections import OrderedDict
 
 
 # Module API
@@ -120,27 +121,41 @@ def parse_feature(feature):
         call = True
 
     # Right side
-    arguments = None
+    args = []
+    kwargs = OrderedDict()
     result = right
     if call:
-        arguments = right[:-1]
+        for item in right[:-1]:
+            if isinstance(item, dict) and len(item) == 1:
+                item_left, item_right = list(item.items())[0]
+                if item_left.endswith('='):
+                    kwargs[item_left[:-1]] = item_right
+                    continue
+            args.append(item)
         result = right[-1]
 
     # Text repr
     text = property
     if assign:
         text = '%s = %s' % (assign, property or json.dumps(result))
-    if arguments is not None:
-        text = '%s(%s)' % (text, ', '.join(map(json.dumps, arguments)))
+    if call:
+        items = []
+        for item in args:
+            items.append(json.dumps(item))
+        for name, item in kwargs.items():
+            items.append('%s=%s' % (name, json.dumps(item)))
+        text = '%s(%s)' % (text, ', '.join(items))
     if not assign:
         text = '%s == %s' % (text, json.dumps(result))
     text = re.sub(r'"\$([^"]*)"', r'\1', text)
 
     return {
         'skip': skip,
+        'call': call,
         'assign': assign,
         'property': property,
-        'arguments': arguments,
+        'args': args,
+        'kwargs': kwargs,
         'result': result,
         'text': text,
     }
@@ -188,8 +203,8 @@ def test_feature(feature, scope):
             property = scope
             for name in feature['property'].split('.'):
                 property = get_property(property, name)
-            if feature['arguments'] is not None:
-                result = property(*feature['arguments'])
+            if feature['call']:
+                result = property(*feature['args'], **feature['kwargs'])
             else:
                 result = property
         except Exception:
@@ -221,8 +236,9 @@ def test_feature(feature, scope):
 
 def dereference_feature(feature, scope):
     feature = copy.deepcopy(feature)
-    if feature['arguments'] is not None:
-        feature['arguments'] = dereference_value(feature['arguments'], scope)
+    if feature['call']:
+        feature['args'] = dereference_value(feature['args'], scope)
+        feature['kwargs'] = dereference_value(feature['kwargs'], scope)
     feature['result'] = dereference_value(feature['result'], scope)
     return feature
 
