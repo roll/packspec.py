@@ -100,13 +100,13 @@ def parse_feature(feature):
     left, right = list(feature.items())[0]
 
     # Left side
-    match = re.match(r'^(?:([^=]*)=)?([^:]*)?(?::(.*))*$', left)
-    assign, property, skip = match.groups()
-    if not assign and not property:
-        raise Exception('Non-valid feature')
+    match = re.match(r'^(?:(.*):)?(?:([^=]*)=)?(.*)?$', left)
+    skip, assign, property = match.groups()
     if skip:
         filters = skip.split(':')
-        skip = '!py' in filters or not ('!' in skip or 'py' in filters)
+        skip = (filters[0] == 'not') == ('py' in filters)
+    if not assign and not property:
+        raise Exception('Non-valid feature')
 
     # Right side
     result = right
@@ -131,12 +131,12 @@ def parse_feature(feature):
         text = '%s == %s' % (text, json.dumps(result))
 
     return {
+        'skip': skip,
         'assign': assign,
         'property': property,
         'arguments': arguments,
         'result': result,
         'text': text,
-        'skip': skip,
     }
 
 
