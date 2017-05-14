@@ -137,16 +137,16 @@ def parse_feature(feature):
     # Text repr
     text = property
     if assign:
-        text = '%s = %s' % (assign, property or json.dumps(result))
+        text = '%s = %s' % (assign, property or json.dumps(result, ensure_ascii=False))
     if call:
         items = []
         for item in args:
-            items.append(json.dumps(item))
+            items.append(json.dumps(item, ensure_ascii=False))
         for name, item in kwargs.items():
-            items.append('%s=%s' % (name, json.dumps(item)))
+            items.append('%s=%s' % (name, json.dumps(item, ensure_ascii=False)))
         text = '%s(%s)' % (text, ', '.join(items))
     if not assign:
-        text = '%s == %s' % (text, json.dumps(result))
+        text = '%s == %s' % (text, json.dumps(result, ensure_ascii=False))
     text = re.sub(r'"\$([^"]*)"', r'\1', text)
 
     return {
