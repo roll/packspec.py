@@ -100,6 +100,7 @@ def parse_feature(feature):
     left, right = list(feature.items())[0]
 
     # Left side
+    call = False
     match = re.match(r'^(?:(.*):)?(?:([^=]*)=)?(.*)?$', left)
     skip, assign, property = match.groups()
     if skip:
@@ -107,13 +108,16 @@ def parse_feature(feature):
         skip = (filters[0] == 'not') == ('py' in filters)
     if not assign and not property:
         raise Exception('Non-valid feature')
+    if property and property.endswith('()'):
+        property = property[:-2]
+        call = True
 
     # Right side
-    result = right
     arguments = None
-    if isinstance(right, list):
-        result = right[-1]
+    result = right
+    if call:
         arguments = right[:-1]
+        result = right[-1]
 
     # Text repr
     text = property
