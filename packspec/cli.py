@@ -66,7 +66,10 @@ def parse_specs(path):
     specs = [specmap[package] for package in sorted(specmap)]
     for spec in specs:
         for name, hook in hookmap.items():
-            spec['scope'][name] = partial(hook, spec['scope'])
+            try:
+                spec['scope'][name] = partial(hook, spec['scope'])
+            except Exception:
+                pass
 
     return specs
 
