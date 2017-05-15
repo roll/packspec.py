@@ -155,7 +155,7 @@ def parse_feature(feature):
         text = '%s(%s)' % (text, ', '.join(items))
     if result and not assign:
         text = '%s == %s' % (text, json.dumps(result, ensure_ascii=False))
-    text = re.sub(r'"\$([^"]*)"', r'\1', text)
+    text = re.sub(r'{"([^{}]*?)": null}', r'\1', text)
 
     return {
         'skip': skip,
@@ -204,7 +204,7 @@ def test_feature(feature, scope):
         return True
 
     # Execute
-    feature = dereference_feature(feature, scope)
+    feature = eval_feature(feature, scope)
     result = feature['result']
     if feature['property']:
         try:
@@ -242,26 +242,25 @@ def test_feature(feature, scope):
     return success
 
 
-def dereference_feature(feature, scope):
+def eval_feature(feature, scope):
     feature = copy.deepcopy(feature)
     if feature['call']:
-        feature['args'] = dereference_value(feature['args'], scope)
-        feature['kwargs'] = dereference_value(feature['kwargs'], scope)
-    feature['result'] = dereference_value(feature['result'], scope)
+        feature['args'] = eval_value(feature['args'], scope)
+        feature['kwargs'] = eval_value(feature['kwargs'], scope)
+    feature['result'] = eval_value(feature['result'], scope)
     return feature
 
 
-def dereference_value(value, scope):
+def eval_value(value, scope):
     value = copy.deepcopy(value)
-    if isinstance(value, six.string_types):
-        if value.startswith('$'):
-            value = scope[value[1:]]
-    elif isinstance(value, list):
-        for index, item in enumerate(list(value)):
-            value[index] = dereference_value(item, scope)
+    if isinstance(value, dict) and len(value) == 1 and list(value.values())[0] is None:
+        value = eval(list(value.keys())[0], scope)
     elif isinstance(value, dict):
         for key, item in list(value.items()):
-            value[key] = dereference_value(item, scope)
+            value[key] = eval_value(item, scope)
+    elif isinstance(value, list):
+        for index, item in enumerate(list(value)):
+            value[index] = eval_value(item, scope)
     return value
 
 
