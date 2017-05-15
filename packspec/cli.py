@@ -112,30 +112,35 @@ def parse_feature(feature):
 
     # Left side
     call = False
-    match = re.match(r'^(?:(.*):)?(?:([^=]*)=)?(.*)?$', left)
+    match = re.match(r'^(?:(.*):)?(?:([^=]*)=)?([^=].*)?$', left)
     skip, assign, property = match.groups()
     if skip:
         filters = skip.split(':')
         skip = (filters[0] == 'not') == ('py' in filters)
     if not assign and not property:
         raise Exception('Non-valid feature')
-    if property and property.endswith('()'):
-        property = property[:-2]
+    if property:
         call = True
+        if property.endswith('=='):
+            property = property[:-2]
+            call = False
 
     # Right side
     args = []
     kwargs = OrderedDict()
     result = right
     if call:
-        for item in right[:-1]:
+        result = None
+        for item in right:
             if isinstance(item, dict) and len(item) == 1:
                 item_left, item_right = list(item.items())[0]
+                if item_left == '==':
+                    result = item_right
+                    continue
                 if item_left.endswith('='):
                     kwargs[item_left[:-1]] = item_right
                     continue
             args.append(item)
-        result = right[-1]
 
     # Text repr
     text = property
@@ -148,7 +153,7 @@ def parse_feature(feature):
         for name, item in kwargs.items():
             items.append('%s=%s' % (name, json.dumps(item, ensure_ascii=False)))
         text = '%s(%s)' % (text, ', '.join(items))
-    if not assign:
+    if result and not assign:
         text = '%s == %s' % (text, json.dumps(result, ensure_ascii=False))
     text = re.sub(r'"\$([^"]*)"', r'\1', text)
 
@@ -224,7 +229,7 @@ def test_feature(feature, scope):
         set_property(owner, names[-1], result)
 
     # Compare
-    success = result == feature['result'] or (result != 'ERROR' and feature['result'] == 'ANY')
+    success = result == feature['result'] if feature['result'] is not None else result != 'ERROR'
     if success:
         message = click.style(emojize(' :heavy_check_mark:  ', use_aliases=True), fg='green')
         message += click.style('%s' % feature['text'])
