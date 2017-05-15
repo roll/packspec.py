@@ -213,7 +213,7 @@ def test_feature(feature, scope):
         return True
 
     # Execute
-    feature = eval_feature(feature, scope)
+    feature = dereference_feature(feature, scope)
     result = feature['result']
     if feature['property']:
         try:
@@ -256,25 +256,28 @@ def test_feature(feature, scope):
     return success
 
 
-def eval_feature(feature, scope):
+def dereference_feature(feature, scope):
     feature = copy.deepcopy(feature)
     if feature['call']:
-        feature['args'] = eval_value(feature['args'], scope)
-        feature['kwargs'] = eval_value(feature['kwargs'], scope)
-    feature['result'] = eval_value(feature['result'], scope)
+        feature['args'] = dereference_value(feature['args'], scope)
+        feature['kwargs'] = dereference_value(feature['kwargs'], scope)
+    feature['result'] = dereference_value(feature['result'], scope)
     return feature
 
 
-def eval_value(value, scope):
+def dereference_value(value, scope):
     value = copy.deepcopy(value)
     if isinstance(value, dict) and len(value) == 1 and list(value.values())[0] is None:
-        value = eval(list(value.keys())[0], scope)
+        result = scope
+        for name in list(value.keys())[0].split('.'):
+            result = get_property(result, name)
+        value = result
     elif isinstance(value, dict):
         for key, item in list(value.items()):
-            value[key] = eval_value(item, scope)
+            value[key] = dereference_value(item, scope)
     elif isinstance(value, list):
         for index, item in enumerate(list(value)):
-            value[index] = eval_value(item, scope)
+            value[index] = dereference_value(item, scope)
     return value
 
 
