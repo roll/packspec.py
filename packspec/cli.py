@@ -7,14 +7,12 @@ from __future__ import unicode_literals
 import io
 import os
 import re
-import six
 import copy
 import json
 import yaml
 import click
 import importlib
 from emoji import emojize
-from functools import partial
 from collections import OrderedDict
 
 
