@@ -7,6 +7,7 @@ from __future__ import unicode_literals
 import io
 import os
 import re
+import six
 import copy
 import json
 import yaml
@@ -102,6 +103,8 @@ def parse_spec(spec):
 
 
 def parse_feature(feature):
+    if isinstance(feature, six.string_types):
+        return {'comment': feature}
     left, right = list(feature.items())[0]
 
     # Left side
@@ -152,6 +155,7 @@ def parse_feature(feature):
     text = re.sub(r'{"([^{}]*?)": null}', r'\1', text)
 
     return {
+        'comment': None,
         'skip': skip,
         'call': call,
         'assign': assign,
@@ -165,7 +169,7 @@ def parse_feature(feature):
 
 def test_specs(specs):
     success = True
-    message = click.style(emojize('\n :small_blue_diamond:  ', use_aliases=True), fg='blue', bold=True)
+    message = click.style(emojize('\n #  ', use_aliases=True))
     message += click.style('Python\n', bold=True)
     click.echo(message)
     for spec in specs:
@@ -177,22 +181,33 @@ def test_specs(specs):
 def test_spec(spec):
     passed = 0
     amount = len(spec['features'])
+    message = click.style(emojize(':heavy_minus_sign:'*3 + '\n', use_aliases=True))
+    click.echo(message)
     for feature in spec['features']:
         passed += test_feature(feature, spec['scope'])
     success = (passed == amount)
+    color = 'green'
     message = click.style(emojize('\n :heavy_check_mark:  ', use_aliases=True), fg='green', bold=True)
     if not success:
+        color = 'red'
         message = click.style(emojize('\n :x:  ', use_aliases=True), fg='red', bold=True)
-    message += click.style('%s: %s/%s\n' % (spec['package'], passed, amount), bold=True)
+    message += click.style('%s: %s/%s\n' % (spec['package'], passed, amount), bold=True, fg=color)
     click.echo(message)
     return success
 
 
 def test_feature(feature, scope):
 
+    # Comment
+    if feature['comment']:
+        message = click.style(emojize('\n #  ', use_aliases=True))
+        message += click.style('%s\n' % feature['comment'], bold=True)
+        click.echo(message)
+        return True
+
     # Skip
     if feature['skip']:
-        message = click.style(emojize(' :question:  ', use_aliases=True), fg='yellow')
+        message = click.style(emojize(' :heavy_minus_sign:  ', use_aliases=True), fg='yellow')
         message += click.style('%s' % feature['text'])
         click.echo(message)
         return True
