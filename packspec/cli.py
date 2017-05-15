@@ -229,8 +229,12 @@ def test_feature(feature, scope):
         message += click.style('%s' % feature['text'])
         click.echo(message)
     else:
+        try:
+            result_text = json.dumps(result)
+        except TypeError:
+            result_text = repr(result)
         message = click.style(emojize(' :x:  ', use_aliases=True), fg='red')
-        message += click.style('%s # %s' % (feature['text'], json.dumps(result)))
+        message += click.style('%s # %s' % (feature['text'], result_text))
         click.echo(message)
 
     return success
