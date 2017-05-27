@@ -17,17 +17,6 @@ from emoji import emojize
 from collections import OrderedDict
 
 
-# Module API
-
-@click.command()
-@click.argument('path', default='.')
-def cli(path):
-    specs = parse_specs(path)
-    success = test_specs(specs)
-    if not success:
-        exit(1)
-
-
 # Helpers
 
 def parse_specs(path):
@@ -308,6 +297,15 @@ def set_property(owner, name, value):
 
 
 # Main program
+
+@click.command()
+@click.argument('path', default='.')
+def cli(path):
+    specs = parse_specs(path)
+    success = test_specs(specs)
+    if not success:
+        exit(1)
+
 
 if __name__ == '__main__':
     cli()
