@@ -206,8 +206,14 @@ def test_feature(feature, scope):
         click.echo(message)
         return True
 
+    # Dereference
+    feature = copy.deepcopy(feature)
+    if feature['call']:
+        feature['args'] = dereference_value(feature['args'], scope)
+        feature['kwargs'] = dereference_value(feature['kwargs'], scope)
+    feature['result'] = dereference_value(feature['result'], scope)
+
     # Execute
-    feature = dereference_feature(feature, scope)
     result = feature['result']
     if feature['property']:
         try:
@@ -218,6 +224,7 @@ def test_feature(feature, scope):
                 result = property(*feature['args'], **feature['kwargs'])
             else:
                 result = property
+            result = normalize_value(result)
         except Exception:
             result = 'ERROR'
 
@@ -249,15 +256,6 @@ def test_feature(feature, scope):
     return success
 
 
-def dereference_feature(feature, scope):
-    feature = copy.deepcopy(feature)
-    if feature['call']:
-        feature['args'] = dereference_value(feature['args'], scope)
-        feature['kwargs'] = dereference_value(feature['kwargs'], scope)
-    feature['result'] = dereference_value(feature['result'], scope)
-    return feature
-
-
 def dereference_value(value, scope):
     value = copy.deepcopy(value)
     if isinstance(value, dict) and len(value) == 1 and list(value.values())[0] is None:
@@ -266,11 +264,23 @@ def dereference_value(value, scope):
             result = get_property(result, name)
         value = result
     elif isinstance(value, dict):
-        for key, item in list(value.items()):
+        for key, item in value.items():
             value[key] = dereference_value(item, scope)
     elif isinstance(value, list):
         for index, item in enumerate(list(value)):
             value[index] = dereference_value(item, scope)
+    return value
+
+
+def normalize_value(value):
+    if isinstance(value, tuple):
+        value = list(value)
+    elif isinstance(value, dict):
+        for key, item in list(value.items()):
+            value[key] = normalize_value(value)
+    elif isinstance(value, list):
+        for index, item in enumerate(list(value)):
+            value[index] = normalize_value(value)
     return value
 
 
