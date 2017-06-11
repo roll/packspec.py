@@ -214,6 +214,7 @@ def test_feature(feature, scope):
     feature['result'] = dereference_value(feature['result'], scope)
 
     # Execute
+    exception = None
     result = feature['result']
     if feature['property']:
         try:
@@ -225,7 +226,8 @@ def test_feature(feature, scope):
             else:
                 result = property
             result = normalize_value(result)
-        except Exception:
+        except Exception as exc:
+            exception = exc
             result = 'ERROR'
 
     # Assign
@@ -250,7 +252,11 @@ def test_feature(feature, scope):
         except TypeError:
             result_text = repr(result)
         message = click.style(emojize(' :x:  ', use_aliases=True), fg='red')
-        message += click.style('%s # %s' % (feature['text'], result_text))
+        message += click.style('%s\n' % feature['text'])
+        if exception:
+            message += click.style('Exception: %s' % exception, fg='red', bold=True)
+        else:
+            message += click.style('Assertion: %s' % result_text, fg='red', bold=True)
         click.echo(message)
 
     return success
@@ -276,7 +282,7 @@ def normalize_value(value):
     if isinstance(value, tuple):
         value = list(value)
     elif isinstance(value, dict):
-        for key, item in list(value.items()):
+        for key, item in value.items():
             value[key] = normalize_value(value)
     elif isinstance(value, list):
         for index, item in enumerate(list(value)):
