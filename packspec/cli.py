@@ -256,7 +256,7 @@ def test_feature(feature, scope):
         if exception:
             message += click.style('Exception: %s' % exception, fg='red', bold=True)
         else:
-            message += click.style('Assertion: %s' % result_text, fg='red', bold=True)
+            message += click.style('Assertion: %s != %s' % (result_text, feature['result']), fg='red', bold=True)
         click.echo(message)
 
     return success
@@ -283,10 +283,10 @@ def normalize_value(value):
         value = list(value)
     elif isinstance(value, dict):
         for key, item in value.items():
-            value[key] = normalize_value(value)
+            value[key] = normalize_value(item)
     elif isinstance(value, list):
         for index, item in enumerate(list(value)):
-            value[index] = normalize_value(value)
+            value[index] = normalize_value(item)
     return value
 
 
