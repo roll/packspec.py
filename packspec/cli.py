@@ -49,7 +49,7 @@ def parse_specs(path):
                 for name, attr in scope.items():
                     if name.startswith('_'):
                         continue
-                    hookmap[name] = attr
+                    hookmap['$%s' % name] = attr
 
     # Result
     specs = [specmap[package] for package in sorted(specmap)]
