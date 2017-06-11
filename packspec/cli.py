@@ -71,10 +71,13 @@ def parse_spec(spec):
         return None
 
     # Features
+    count = 0
     features = []
     for feature in contents:
         feature = parse_feature(feature)
         features.append(feature)
+        if not feature['comment']:
+            count += 1
 
     # Scope
     scope = {}
@@ -88,6 +91,7 @@ def parse_spec(spec):
         'package': package,
         'features': features,
         'scope': scope,
+        'count': count,
     }
 
 
@@ -169,18 +173,19 @@ def test_specs(specs):
 
 def test_spec(spec):
     passed = 0
-    amount = len(spec['features'])
     message = click.style(emojize(':heavy_minus_sign:'*3 + '\n', use_aliases=True))
     click.echo(message)
     for feature in spec['features']:
-        passed += test_feature(feature, spec['scope'])
-    success = (passed == amount)
+        feature_passed = test_feature(feature, spec['scope'])
+        if not feature['comment']:
+            passed += feature_passed
+    success = (passed == spec['count'])
     color = 'green'
     message = click.style(emojize('\n :heavy_check_mark:  ', use_aliases=True), fg='green', bold=True)
     if not success:
         color = 'red'
         message = click.style(emojize('\n :x:  ', use_aliases=True), fg='red', bold=True)
-    message += click.style('%s: %s/%s\n' % (spec['package'], passed, amount), bold=True, fg=color)
+    message += click.style('%s: %s/%s\n' % (spec['package'], passed, spec['count']), bold=True, fg=color)
     click.echo(message)
     return success
 
