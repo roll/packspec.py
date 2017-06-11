@@ -82,10 +82,10 @@ def parse_spec(spec):
         if isinstance(package, six.string_types):
             package = {'default': [package]}
         elif isinstance(package, list):
-            package = {'default': list(reversed(package))}
+            package = {'default': package}
         elif isinstance(package, dict):
             for key, value in list(package.items()):
-                package[key] = list(reversed(value)) if isinstance(value, list) else [value]
+                package[key] = value if isinstance(value, list) else [value]
         assert feature['assign'] == 'PACKAGE'
         assert not feature['skip']
     except Exception:
@@ -100,17 +100,21 @@ def parse_spec(spec):
     # Scope
     scope = {}
     packages = []
+    attributes = {}
     for namespace, module_names in package.items():
+        packages.extend(module_names)
         namespace_scope = scope
         if namespace != 'default':
             namespace_scope = scope.setdefault(namespace, {})
         for module_name in module_names:
-            packages.append(module_name)
             attributes = get_module_attributes(module_name)
-            if not attributes:
-                continue
             namespace_scope.update(attributes)
-    package = '/'.join(reversed(packages))
+            if attributes:
+                break
+        if not attributes:
+            scope = {}
+            break
+    package = '/'.join(sorted(packages))
 
     return {
         'package': package,
@@ -263,7 +267,7 @@ def test_feature(feature, scope, ready):
     if feature['assign']:
         if feature['assign'] == 'PACKAGE' and not ready:
             result = 'ERROR'
-            exception = ImportError('Package "%s" can\'t be imported' % feature['result'])
+            exception = ImportError('Package can\'t be fully imported')
         else:
             owner = scope
             names = feature['assign'].split('.')
@@ -300,7 +304,7 @@ def get_module_attributes(module_name):
     try:
         module = importlib.import_module(module_name)
     except ImportError:
-        return None
+        return {}
     for name in dir(module):
         if name.startswith('_'):
             continue
