@@ -144,7 +144,7 @@ def parse_feature(feature):
             items.append('%s=%s' % (name, json.dumps(item, ensure_ascii=False)))
         text = '%s(%s)' % (text, ', '.join(items))
     if result and not assign:
-        text = '%s == %s' % (text, json.dumps(result, ensure_ascii=False))
+        text = '%s == %s' % (text, result if result == 'ERROR' else json.dumps(result, ensure_ascii=False))
     text = re.sub(r'{"([^{}]*?)": null}', r'\1', text)
 
     return {
