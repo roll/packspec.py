@@ -294,6 +294,8 @@ def normalize_value(value):
 def get_property(owner, name):
     if isinstance(owner, dict):
         return owner.get(name)
+    elif isinstance(owner, (list, tuple)):
+        return owner[int(name)]
     return getattr(owner, name, None)
 
 
