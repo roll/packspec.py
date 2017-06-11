@@ -227,7 +227,6 @@ def test_feature(feature, scope):
         set_property(owner, names[-1], result)
 
     # Compare
-    result = isoformat_value(result)
     success = result == feature['result'] if feature['result'] is not None else result != 'ERROR'
     if success:
         message = click.style(emojize(' :heavy_check_mark:  ', use_aliases=True), fg='green')
@@ -267,19 +266,6 @@ def dereference_value(value, scope):
     elif isinstance(value, list):
         for index, item in enumerate(list(value)):
             value[index] = dereference_value(item, scope)
-    return value
-
-
-def isoformat_value(value):
-    isoformat = getattr(value, 'isoformat', None)
-    if isoformat is not None:
-        value = isoformat()
-    elif isinstance(value, dict):
-        for key, item in list(value.items()):
-            value[key] = isoformat_value(item)
-    elif isinstance(value, list):
-        for index, item in enumerate(list(value)):
-            value[index] = isoformat_value(item)
     return value
 
 
