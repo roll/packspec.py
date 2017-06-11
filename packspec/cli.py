@@ -35,6 +35,7 @@ def parse_specs(path):
                     specmap[spec['package']] = spec
                 else:
                     specmap[spec['package']]['features'].extend(spec['features'])
+                    specmap[spec['package']]['scope'].update(spec['scope'])
 
     # Hooks
     hookmap = {}
@@ -53,6 +54,16 @@ def parse_specs(path):
     # Result
     specs = [specmap[package] for package in sorted(specmap)]
     for spec in specs:
+        spec['ready'] = bool(spec['scope'])
+        spec['stats'] = {'features': 0, 'comments': 0, 'tests': 0}
+        for index, feature in list(enumerate(spec['features'])):
+            if feature.get('assign') == 'PACKAGE' and index:
+                del spec['features'][index]
+            spec['stats']['features'] += 1
+            if feature['comment']:
+                spec['stats']['comments'] += 1
+            else:
+                spec['stats']['tests'] += 1
         spec['scope'].update(hookmap)
 
     return specs
@@ -64,7 +75,14 @@ def parse_spec(spec):
     contents = yaml.load(spec)
     try:
         feature = parse_feature(contents[0])
-        package = feature['result']
+        package = copy.deepcopy(feature['result'])
+        if isinstance(package, six.string_types):
+            package = {'default': [package]}
+        elif isinstance(package, list):
+            package = {'default': list(reversed(package))}
+        elif isinstance(package, dict):
+            for key, value in list(package.items()):
+                package[key] = list(reversed(value)) if isinstance(value, list) else [value]
         assert feature['assign'] == 'PACKAGE'
         assert not feature['skip']
     except Exception:
@@ -72,29 +90,29 @@ def parse_spec(spec):
 
     # Features
     features = []
-    count = {'all': 0, 'tests': 0, 'comments': 0}
     for feature in contents:
         feature = parse_feature(feature)
         features.append(feature)
-        count['all'] += 1
-        if feature['comment']:
-            count['comments'] += 1
-        else:
-            count['tests'] += 1
 
     # Scope
     scope = {}
-    module = importlib.import_module(package)
-    for name in dir(module):
-        if name.startswith('_'):
-            continue
-        scope[name] = getattr(module, name)
+    packages = []
+    for namespace, module_names in package.items():
+        namespace_scope = scope
+        if namespace != 'default':
+            namespace_scope = scope.setdefault(namespace, {})
+        for module_name in module_names:
+            packages.append(module_name)
+            attributes = get_module_attributes(module_name)
+            if not attributes:
+                continue
+            namespace_scope.update(attributes)
+    package = '/'.join(reversed(packages))
 
     return {
         'package': package,
         'features': features,
         'scope': scope,
-        'count': count,
     }
 
 
@@ -179,19 +197,19 @@ def test_spec(spec):
     message = click.style(emojize(':heavy_minus_sign:'*3 + '\n', use_aliases=True))
     click.echo(message)
     for feature in spec['features']:
-        passed += test_feature(feature, spec['scope'])
-    success = (passed == spec['count']['all'])
+        passed += test_feature(feature, spec['scope'], spec['ready'])
+    success = (passed == spec['stats']['features'])
     color = 'green'
     message = click.style(emojize('\n :heavy_check_mark:  ', use_aliases=True), fg='green', bold=True)
     if not success:
         color = 'red'
         message = click.style(emojize('\n :x:  ', use_aliases=True), fg='red', bold=True)
-    message += click.style('%s: %s/%s\n' % (spec['package'], passed - spec['count']['comments'], spec['count']['tests']), bold=True, fg=color)
+    message += click.style('%s: %s/%s\n' % (spec['package'], passed - spec['stats']['comments'], spec['stats']['tests']), bold=True, fg=color)
     click.echo(message)
     return success
 
 
-def test_feature(feature, scope):
+def test_feature(feature, scope, ready):
 
     # Comment
     if feature['comment']:
@@ -233,13 +251,17 @@ def test_feature(feature, scope):
 
     # Assign
     if feature['assign']:
-        owner = scope
-        names = feature['assign'].split('.')
-        for name in names[:-1]:
-            owner = get_property(owner, name)
-        if get_property(owner, names[-1]) is not None and names[-1].isupper():
-            raise Exception('Can\'t update the constant "%s"' % names[-1])
-        set_property(owner, names[-1], result)
+        if feature['assign'] == 'PACKAGE' and not ready:
+            result = 'ERROR'
+            exception = ImportError('Package "%s" can\'t be imported' % feature['result'])
+        else:
+            owner = scope
+            names = feature['assign'].split('.')
+            for name in names[:-1]:
+                owner = get_property(owner, name)
+            if get_property(owner, names[-1]) is not None and names[-1].isupper():
+                raise Exception('Can\'t update the constant "%s"' % names[-1])
+            set_property(owner, names[-1], result)
 
     # Compare
     success = result == feature['result'] if feature['result'] is not None else result != 'ERROR'
@@ -257,10 +279,23 @@ def test_feature(feature, scope):
         if exception:
             message += click.style('Exception: %s' % exception, fg='red', bold=True)
         else:
-            message += click.style('Assertion: %s != %s' % (result_text, feature['result']), fg='red', bold=True)
+            message += click.style('Assertion: %s != %s' % (result_text, json.dumps(feature['result'], ensure_ascii=False)), fg='red', bold=True)
         click.echo(message)
 
     return success
+
+
+def get_module_attributes(module_name):
+    attributes = {}
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError:
+        return None
+    for name in dir(module):
+        if name.startswith('_'):
+            continue
+        attributes[name] = getattr(module, name)
+    return attributes
 
 
 def dereference_value(value, scope):
