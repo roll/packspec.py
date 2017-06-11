@@ -54,16 +54,19 @@ def parse_specs(path):
     # Result
     specs = [specmap[package] for package in sorted(specmap)]
     for spec in specs:
+        skip = False
         spec['ready'] = bool(spec['scope'])
         spec['stats'] = {'features': 0, 'comments': 0, 'tests': 0}
         for index, feature in list(enumerate(spec['features'])):
-            if feature.get('assign') == 'PACKAGE' and index:
+            if feature['assign'] == 'PACKAGE' and index:
                 del spec['features'][index]
             spec['stats']['features'] += 1
             if feature['comment']:
+                skip = feature['skip']
                 spec['stats']['comments'] += 1
             else:
                 spec['stats']['tests'] += 1
+            feature['skip'] = skip or feature['skip']
         spec['scope'].update(hookmap)
 
     return specs
@@ -117,8 +120,15 @@ def parse_spec(spec):
 
 
 def parse_feature(feature):
+
+    # General
     if isinstance(feature, six.string_types):
-        return {'comment': feature}
+        match = re.match(r'^(?:(.*):)?(\w.*)$', feature)
+        skip, comment = match.groups()
+        if skip:
+            filters = skip.split(':')
+            skip = (filters[0] == 'not') == ('py' in filters)
+        return {'assign': None, 'comment': comment, 'skip': skip}
     left, right = list(feature.items())[0]
 
     # Left side
