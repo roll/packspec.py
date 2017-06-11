@@ -56,7 +56,7 @@ def parse_specs(path):
     for spec in specs:
         skip = False
         spec['ready'] = bool(spec['scope'])
-        spec['stats'] = {'features': 0, 'comments': 0, 'tests': 0}
+        spec['stats'] = {'features': 0, 'comments': 0, 'skipped': 0, 'tests': 0}
         for index, feature in list(enumerate(spec['features'])):
             if feature['assign'] == 'PACKAGE' and index:
                 del spec['features'][index]
@@ -64,9 +64,11 @@ def parse_specs(path):
             if feature['comment']:
                 skip = feature['skip']
                 spec['stats']['comments'] += 1
-            else:
-                spec['stats']['tests'] += 1
             feature['skip'] = skip or feature['skip']
+            if not feature['comment']:
+                spec['stats']['tests'] += 1
+                if feature['skip']:
+                    spec['stats']['skipped'] += 1
         spec['scope'].update(hookmap)
 
     return specs
@@ -218,7 +220,7 @@ def test_spec(spec):
     if not success:
         color = 'red'
         message = click.style(emojize('\n :x:  ', use_aliases=True), fg='red', bold=True)
-    message += click.style('%s: %s/%s\n' % (spec['package'], passed - spec['stats']['comments'], spec['stats']['tests']), bold=True, fg=color)
+    message += click.style('%s: %s/%s\n' % (spec['package'], passed - spec['stats']['comments'] - spec['stats']['skipped'], spec['stats']['tests'] - spec['stats']['skipped']), bold=True, fg=color)
     click.echo(message)
     return success
 
