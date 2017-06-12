@@ -354,6 +354,9 @@ def set_property(owner, name, value):
     if isinstance(owner, dict):
         owner[name] = value
         return
+    elif isinstance(owner, list):
+        owner[int(name)] = value
+        return
     return setattr(owner, name, value)
 
 
