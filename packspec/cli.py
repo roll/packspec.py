@@ -9,6 +9,7 @@ import os
 import re
 import six
 import copy
+import glob
 import json
 import yaml
 import click
@@ -21,107 +22,79 @@ from collections import OrderedDict
 
 def parse_specs(path):
 
+    # Paths
+    paths = []
+    if path is None:
+        paths = glob.glob('packspec.*')
+        if not paths:
+            path = 'packspec'
+    if os.path.isfile(path):
+        paths = [path]
+    elif os.path.isdir(path):
+        for name in os.listdir(path):
+            paths.append(os.path.join(path, name))
+
     # Specs
-    specmap = {}
-    for root, dirnames, filenames in os.walk(path):
-        for filename in filenames:
-            if filename.endswith('.yml'):
-                filepath = os.path.join(root, filename)
-                filecont = io.open(filepath, encoding='utf-8').read()
-                spec = parse_spec(filecont)
-                if not spec:
-                    continue
-                if spec['package'] not in specmap:
-                    specmap[spec['package']] = spec
-                else:
-                    specmap[spec['package']]['features'].extend(spec['features'])
-                    specmap[spec['package']]['scope'].update(spec['scope'])
-
-    # Hooks
-    hookmap = {}
-    for root, dirnames, filenames in os.walk(path):
-        for filename in filenames:
-            if filename == 'packspec.py':
-                filepath = os.path.join(root, filename)
-                filecont = io.open(filepath, encoding='utf-8').read()
-                scope = {}
-                exec(filecont, scope)
-                for name, attr in scope.items():
-                    if name.startswith('_'):
-                        continue
-                    hookmap['$%s' % name] = attr
-
-    # Result
-    specs = [specmap[package] for package in sorted(specmap)]
-    for spec in specs:
-        skip = False
-        spec['ready'] = bool(spec['scope'])
-        spec['stats'] = {'features': 0, 'comments': 0, 'skipped': 0, 'tests': 0}
-        for index, feature in list(enumerate(spec['features'])):
-            if feature['assign'] == 'PACKAGE' and index:
-                del spec['features'][index]
-            spec['stats']['features'] += 1
-            if feature['comment']:
-                skip = feature['skip']
-                spec['stats']['comments'] += 1
-            feature['skip'] = skip or feature['skip']
-            if not feature['comment']:
-                spec['stats']['tests'] += 1
-                if feature['skip']:
-                    spec['stats']['skipped'] += 1
-        spec['scope'].update(hookmap)
+    specs = []
+    for path in paths:
+        spec = parse_spec(path)
+        if spec:
+            specs.append(spec)
 
     return specs
 
 
-def parse_spec(spec):
+def parse_spec(path):
+
+    # Documents
+    if not path.endswith('.yml'):
+        return None
+    contents = io.open(path, encoding='utf-8').read()
+    documents = list(yaml.load_all(contents))
 
     # Package
-    contents = yaml.load(spec)
-    try:
-        feature = parse_feature(contents[0])
-        package = copy.deepcopy(feature['result'])
-        if isinstance(package, six.string_types):
-            package = {'default': [package]}
-        elif isinstance(package, list):
-            package = {'default': package}
-        elif isinstance(package, dict):
-            for key, value in list(package.items()):
-                package[key] = value if isinstance(value, list) else [value]
-        assert feature['assign'] == 'PACKAGE'
-        assert not feature['skip']
-    except Exception:
+    feature = parse_feature(documents[0][0])
+    if feature['skip']:
         return None
+    package = feature['comment']
 
     # Features
+    skip = False
     features = []
-    for feature in contents:
+    for feature in documents[0]:
         feature = parse_feature(feature)
         features.append(feature)
+        if feature['comment']:
+            skip = feature['skip']
+        feature['skip'] = skip or feature['skip']
 
     # Scope
     scope = {}
-    packages = []
-    attributes = {}
-    for namespace, module_names in package.items():
-        packages.extend(module_names)
-        namespace_scope = scope
-        if namespace != 'default':
-            namespace_scope = scope.setdefault(namespace, {})
-        for module_name in module_names:
-            attributes = get_module_attributes(module_name)
-            namespace_scope.update(attributes)
-            if attributes:
-                break
-        if not attributes:
-            scope = {}
-            break
-    package = '/'.join(sorted(packages))
+    scope['$import'] = builtin_import
+    if len(documents) > 1 and documents[1].get('python'):
+        user_scope = {}
+        exec(documents[1].get('python'), user_scope)
+        for name, attr in user_scope.items():
+            if name.startswith('_'):
+                continue
+            scope['$%s' % name] = attr
+
+    # Stats
+    stats = {'features': 0, 'comments': 0, 'skipped': 0, 'tests': 0}
+    for feature in features:
+        stats['features'] += 1
+        if feature['comment']:
+            stats['comments'] += 1
+        else:
+            stats['tests'] += 1
+            if feature['skip']:
+                stats['skipped'] += 1
 
     return {
         'package': package,
         'features': features,
         'scope': scope,
+        'stats': stats,
     }
 
 
@@ -129,21 +102,19 @@ def parse_feature(feature):
 
     # General
     if isinstance(feature, six.string_types):
-        match = re.match(r'^(?:(.*):)?(\w.*)$', feature)
+        match = re.match(r'^(?:\((.*)\))?(\w.*)$', feature)
         skip, comment = match.groups()
         if skip:
-            filters = skip.split(':')
-            skip = (filters[0] == 'not') == ('py' in filters)
+            skip = 'py' not in skip.split('|')
         return {'assign': None, 'comment': comment, 'skip': skip}
     left, right = list(feature.items())[0]
 
     # Left side
     call = False
-    match = re.match(r'^(?:(.*):)?(?:([^=]*)=)?([^=].*)?$', left)
+    match = re.match(r'^(?:\((.*)\))?(?:([^=]*)=)?([^=].*)?$', left)
     skip, assign, property = match.groups()
     if skip:
-        filters = skip.split(':')
-        skip = (filters[0] == 'not') == ('py' in filters)
+        skip = 'py' not in skip.split('|')
     if not assign and not property:
         raise Exception('Non-valid feature')
     if property:
@@ -198,23 +169,34 @@ def parse_feature(feature):
 
 
 def test_specs(specs):
-    success = True
+
+    # Message
     message = click.style(emojize('\n #  ', use_aliases=True))
     message += click.style('Python\n', bold=True)
     click.echo(message)
+
+    # Test specs
+    success = True
     for spec in specs:
         spec_success = test_spec(spec)
         success = success and spec_success
+
     return success
 
 
 def test_spec(spec):
-    passed = 0
-    message = click.style(emojize(':heavy_minus_sign:'*3 + '\n', use_aliases=True))
+
+    # Message
+    message = click.style(emojize(':heavy_minus_sign:'*3, use_aliases=True))
     click.echo(message)
+
+    # Test spec
+    passed = 0
     for feature in spec['features']:
-        passed += test_feature(feature, spec['scope'], spec['ready'])
+        passed += test_feature(feature, spec['scope'])
     success = (passed == spec['stats']['features'])
+
+    # Message
     color = 'green'
     message = click.style(emojize('\n :heavy_check_mark:  ', use_aliases=True), fg='green', bold=True)
     if not success:
@@ -222,10 +204,11 @@ def test_spec(spec):
         message = click.style(emojize('\n :x:  ', use_aliases=True), fg='red', bold=True)
     message += click.style('%s: %s/%s\n' % (spec['package'], passed - spec['stats']['comments'] - spec['stats']['skipped'], spec['stats']['tests'] - spec['stats']['skipped']), bold=True, fg=color)
     click.echo(message)
+
     return success
 
 
-def test_feature(feature, scope, ready):
+def test_feature(feature, scope):
 
     # Comment
     if feature['comment']:
@@ -267,17 +250,13 @@ def test_feature(feature, scope, ready):
 
     # Assign
     if feature['assign']:
-        if feature['assign'] == 'PACKAGE' and not ready:
-            result = 'ERROR'
-            exception = ImportError('Package can\'t be fully imported')
-        else:
-            owner = scope
-            names = feature['assign'].split('.')
-            for name in names[:-1]:
-                owner = get_property(owner, name)
-            if get_property(owner, names[-1]) is not None and names[-1].isupper():
-                raise Exception('Can\'t update the constant "%s"' % names[-1])
-            set_property(owner, names[-1], result)
+        owner = scope
+        names = feature['assign'].split('.')
+        for name in names[:-1]:
+            owner = get_property(owner, name)
+        if get_property(owner, names[-1]) is not None and names[-1].isupper():
+            raise Exception('Can\'t update the constant "%s"' % names[-1])
+        set_property(owner, names[-1], result)
 
     # Compare
     success = result == feature['result'] if feature['result'] is not None else result != 'ERROR'
@@ -301,12 +280,9 @@ def test_feature(feature, scope, ready):
     return success
 
 
-def get_module_attributes(module_name):
+def builtin_import(package):
     attributes = {}
-    try:
-        module = importlib.import_module(module_name)
-    except ImportError:
-        return {}
+    module = importlib.import_module(package)
     for name in dir(module):
         if name.startswith('_'):
             continue
@@ -363,7 +339,7 @@ def set_property(owner, name, value):
 # Main program
 
 @click.command()
-@click.argument('path', default='.')
+@click.argument('path', required=False)
 def cli(path):
     specs = parse_specs(path)
     success = test_specs(specs)
