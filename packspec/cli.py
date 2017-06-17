@@ -71,9 +71,9 @@ def parse_spec(path):
     # Scope
     scope = {}
     scope['$import'] = builtin_import
-    if len(documents) > 1 and documents[1].get('python'):
+    if len(documents) > 1 and documents[1].get('py'):
         user_scope = {}
-        exec(documents[1].get('python'), user_scope)
+        exec(documents[1].get('py'), user_scope)
         for name, attr in user_scope.items():
             if name.startswith('_'):
                 continue
