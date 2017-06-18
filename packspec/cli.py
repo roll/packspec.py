@@ -7,6 +7,7 @@ from __future__ import unicode_literals
 import io
 import os
 import re
+import sys
 import six
 import copy
 import glob
@@ -14,6 +15,7 @@ import json
 import yaml
 import click
 import importlib
+import traceback
 from emoji import emojize
 from collections import OrderedDict
 
@@ -24,36 +26,39 @@ def parse_specs(path):
 
     # Paths
     paths = []
-    if path is None:
-        paths = glob.glob('packspec.*')
+    if path:
+        if os.path.isfile(path):
+            paths = [path]
+        elif os.path.isdir(path):
+            paths = glob.glob('%s/*.*' % path)
+    if not path:
         if not paths:
-            path = 'packspec'
-    if os.path.isfile(path):
-        paths = [path]
-    elif os.path.isdir(path):
-        for name in os.listdir(path):
-            paths.append(os.path.join(path, name))
+            paths = glob.glob('packspec.*')
+        if not paths:
+            paths = glob.glob('packspec/*.*')
+        if not paths:
+            paths = ['README.md']
 
     # Specs
     specs = []
     for path in paths:
-        spec = parse_spec(path)
+        spec = None
+        if path.endswith('.yml'):
+            spec = parse_spec_yml(path)
+        elif path.endswith('.md'):
+            spec = parse_spec_md(path)
         if spec:
             specs.append(spec)
 
     return specs
 
 
-def parse_spec(path):
-
-    # Documents
-    if not path.endswith('.yml'):
-        return None
-    contents = io.open(path, encoding='utf-8').read()
-    documents = list(yaml.load_all(contents))
+def parse_spec_yml(path):
 
     # Package
-    feature = parse_feature(documents[0][0])
+    contents = io.open(path, encoding='utf-8').read()
+    documents = list(yaml.load_all(contents))
+    feature = parse_feature_yml(documents[0][0])
     if feature['skip']:
         return None
     package = feature['comment']
@@ -62,7 +67,7 @@ def parse_spec(path):
     skip = False
     features = []
     for feature in documents[0]:
-        feature = parse_feature(feature)
+        feature = parse_feature_yml(feature)
         features.append(feature)
         if feature['comment']:
             skip = feature['skip']
@@ -91,6 +96,7 @@ def parse_spec(path):
                 stats['skipped'] += 1
 
     return {
+        'type': 'abstract',
         'package': package,
         'features': features,
         'scope': scope,
@@ -98,7 +104,65 @@ def parse_spec(path):
     }
 
 
-def parse_feature(feature):
+def parse_spec_md(path):
+
+    # Package
+    contents = io.open(path, encoding='utf-8')
+    lines = contents.readlines()
+    package = lines[0].strip('#\n ')
+
+    # Blocks
+    code = ''
+    blocks = []
+    capture = False
+    for index, line in enumerate(lines):
+        if line.startswith('```py'):
+            capture = True
+            code = ''
+            continue
+        if line.startswith('```'):
+            capture = False
+            blocks.append(('code', code))
+        if capture:
+            code += line
+            continue
+        if line.startswith('#'):
+            comment = line.strip('#\n ')
+            blocks.append(('comment', comment))
+
+    # Features
+    features = []
+    for type, block in blocks:
+        if type == 'comment':
+            features.append({'comment': comment})
+            continue
+        for line_number, line in enumerate(block.split('\n'), start=1):
+            if line:
+                features.append({'line_number': line_number, 'line': line, 'block': block})
+
+    # Stats
+    stats = {'features': 0, 'comments': 0, 'skipped': 0, 'tests': 0}
+    for feature in features:
+        stats['features'] += 1
+        if feature.get('comment'):
+            stats['comments'] += 1
+        else:
+            stats['tests'] += 1
+
+    return {
+        'type': 'native',
+        'package': package,
+        'features': features,
+        'scope': {},
+        'stats': stats,
+    }
+
+
+def parse_spec_py(path):
+    pass
+
+
+def parse_feature_yml(feature):
 
     # General
     if isinstance(feature, six.string_types):
@@ -106,7 +170,7 @@ def parse_feature(feature):
         skip, comment = match.groups()
         if skip:
             skip = 'py' not in skip.split('|')
-        return {'assign': None, 'comment': comment, 'skip': skip}
+        return {'comment': comment, 'skip': skip}
     left, right = list(feature.items())[0]
 
     # Left side
@@ -178,13 +242,16 @@ def test_specs(specs):
     # Test specs
     success = True
     for spec in specs:
-        spec_success = test_spec(spec)
+        if spec['type'] == 'abstract':
+            spec_success = test_spec_abstract(spec)
+        else:
+            spec_success = test_spec_native(spec)
         success = success and spec_success
 
     return success
 
 
-def test_spec(spec):
+def test_spec_abstract(spec):
 
     # Message
     message = click.style(emojize(':heavy_minus_sign:'*3, use_aliases=True))
@@ -195,6 +262,65 @@ def test_spec(spec):
     for feature in spec['features']:
         passed += test_feature(feature, spec['scope'])
     success = (passed == spec['stats']['features'])
+
+    # Message
+    color = 'green'
+    message = click.style(emojize('\n :heavy_check_mark:  ', use_aliases=True), fg='green', bold=True)
+    if not success:
+        color = 'red'
+        message = click.style(emojize('\n :x:  ', use_aliases=True), fg='red', bold=True)
+    message += click.style('%s: %s/%s\n' % (spec['package'], passed - spec['stats']['comments'] - spec['stats']['skipped'], spec['stats']['tests'] - spec['stats']['skipped']), bold=True, fg=color)
+    click.echo(message)
+
+    return success
+
+
+def test_spec_native(spec):
+
+    # Message
+    message = click.style(emojize(':heavy_minus_sign:'*3, use_aliases=True))
+    click.echo(message)
+
+    passed = 0
+    success = True
+    exception_line = None
+    for feature in spec['features']:
+
+        # Comment
+        if feature.get('comment'):
+            message = click.style(emojize('\n #  ', use_aliases=True))
+            message += click.style('%s\n' % feature['comment'], bold=True)
+            click.echo(message)
+            passed += 1
+            continue
+
+        # Execute
+        if feature['line_number'] == 1:
+            exception_line = None
+            try:
+                exec(feature['block'], spec['scope'])
+            except Exception:
+                success = False
+                _, exception, tb = sys.exc_info()
+                exception_line = traceback.extract_tb(tb)[-1][1]
+
+        # Message
+        if not exception_line or feature['line_number'] < exception_line:
+            message = click.style(emojize(' :heavy_check_mark:  ', use_aliases=True), fg='green')
+            message += click.style('%s' % feature['line'])
+            click.echo(message)
+            passed += 1
+        elif feature['line_number'] == exception_line:
+            message = click.style(emojize(' :x:  ', use_aliases=True), fg='red')
+            message += click.style('%s\n' % feature['line'])
+            message += click.style('Exception: %s' % exception, fg='red', bold=True)
+            click.echo(message)
+        elif feature['line_number'] > exception_line:
+            message = click.style(emojize(' :heavy_minus_sign:  ', use_aliases=True), fg='yellow')
+            message += click.style('%s' % feature['line'])
+            click.echo(message)
+            spec['stats']['skipped'] += 1
+            passed += 1
 
     # Message
     color = 'green'
