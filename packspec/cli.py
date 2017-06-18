@@ -47,6 +47,8 @@ def parse_specs(path):
             spec = parse_spec_yml(path)
         elif path.endswith('.md'):
             spec = parse_spec_md(path)
+        elif path.endswith('.py'):
+            spec = parse_spec_py(path)
         if spec:
             specs.append(spec)
 
@@ -115,7 +117,7 @@ def parse_spec_md(path):
     code = ''
     blocks = []
     capture = False
-    for index, line in enumerate(lines):
+    for line in lines:
         if line.startswith('```py'):
             capture = True
             code = ''
@@ -159,7 +161,55 @@ def parse_spec_md(path):
 
 
 def parse_spec_py(path):
-    pass
+
+    # Package
+    contents = io.open(path, encoding='utf-8')
+    lines = contents.readlines()
+    package = lines[0].strip('#\n ')
+
+    # Blocks
+    code = ''
+    blocks = []
+    for line in lines:
+        if not line.strip():
+            continue
+        if line.startswith('#'):
+            comment = line.strip('#\n ')
+            if code:
+                blocks.append(('code', code))
+                code = ''
+            blocks.append(('comment', comment))
+            continue
+        code += line
+    if code:
+        blocks.append(('code', code))
+
+    # Features
+    features = []
+    for type, block in blocks:
+        if type == 'comment':
+            features.append({'comment': block})
+            continue
+        for line_number, line in enumerate(block.split('\n'), start=1):
+            if line:
+                features.append({'line_number': line_number, 'line': line, 'block': block})
+
+    # Stats
+    stats = {'features': 0, 'comments': 0, 'skipped': 0, 'tests': 0}
+    for feature in features:
+        stats['features'] += 1
+        if feature.get('comment'):
+            stats['comments'] += 1
+        else:
+            stats['tests'] += 1
+
+    return {
+        'type': 'native',
+        'package': package,
+        'features': features,
+        'scope': {},
+        'stats': stats,
+    }
 
 
 def parse_feature_yml(feature):
