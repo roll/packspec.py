@@ -310,7 +310,7 @@ def test_spec_abstract(spec):
     # Test spec
     passed = 0
     for feature in spec['features']:
-        passed += test_feature(feature, spec['scope'])
+        passed += test_feature_abstract(feature, spec['scope'])
     success = (passed == spec['stats']['features'])
 
     # Message
@@ -384,7 +384,7 @@ def test_spec_native(spec):
     return success
 
 
-def test_feature(feature, scope):
+def test_feature_abstract(feature, scope):
 
     # Comment
     if feature['comment']:
