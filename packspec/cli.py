@@ -136,7 +136,7 @@ def parse_spec_md(path):
     features = []
     for type, block in blocks:
         if type == 'comment':
-            features.append({'comment': comment})
+            features.append({'comment': block})
             continue
         for line_number, line in enumerate(block.split('\n'), start=1):
             if line:
@@ -331,6 +331,7 @@ def test_spec_native(spec):
     message = click.style(emojize(':heavy_minus_sign:'*3, use_aliases=True))
     click.echo(message)
 
+    # Test spec
     passed = 0
     success = True
     exception_line = None
