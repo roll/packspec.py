@@ -4,4 +4,17 @@
 [![Coveralls](http://img.shields.io/coveralls/packspec/packspec-py.svg?branch=master)](https://coveralls.io/r/packspec/packspec-py?branch=master)
 [![PyPi](https://img.shields.io/pypi/v/packspec.svg)](https://pypi.python.org/pypi/packspec)
 
-Cross-language testings made easy: unified YML-based package specification and Python/JavaScript/Ruby/PHP test runners: https://github.com/packspec/packspec
+Cross-language testings made easy: unified YML-based package specification and Python/JavaScript/Ruby/PHP test runners:
+
+- https://github.com/packspec/packspec
+
+---
+
+### Contributing
+
+```bash
+$ virtualenv .python -ppython3.5
+$ source .python/bin/activate
+$ make install
+$ make test
+```
