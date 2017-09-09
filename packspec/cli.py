@@ -251,8 +251,6 @@ def test_feature(feature, scope):
         names = feature['assign'].split('.')
         for name in names[:-1]:
             owner = get_property(owner, name)
-        if get_property(owner, names[-1]) is not None and names[-1].isupper():
-            raise Exception('Can\'t update the constant "%s"' % names[-1])
         set_property(owner, names[-1], result)
 
     # Compare

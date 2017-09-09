@@ -1,1 +1,70 @@
-- packspec
+- value
+
+- value=: 'value'
+- value==: 'value'
+
+- class
+
+- class=: {$TestClass}
+- class.static_property==: {value}
+- class.static_method: [==: {value}]
+
+- instance
+
+- instance=$TestClass: ['value']
+- instance.property==: 'value'
+- instance.method: [==: 'value']
+- instance.name=: 'value'
+- instance.name==: 'value'
+
+- function
+
+- result=$test_function: ['value', suffix=: '!']
+- result==: 'VALUE!'
+
+- object
+
+- object=: {'key': 'value'}
+- object.nested=: {'key': 'value'}
+- object.nested.key==: 'value'
+- object.key==: 'value'
+
+- array
+
+- array=: ['value', 'nested']
+- array.1=: ['value']
+- array.1.0==: 'value'
+- array.0==: 'value'
+
+- filter
+
+- (xx)value==: 'FAIL'
+
+- (py)import
+
+- json=$import: ['json']
+- json.dumps: [{value}, ==: '"value"']
+
+---
+
+py: |
+
+  class TestClass:
+    static_property = 'value'
+
+    @staticmethod
+    def static_method():
+      return 'value'
+
+    def __init__(self, value):
+      self.value = value
+
+    @property
+    def property(self):
+      return self.value
+
+    def method(self):
+      return self.value
+
+  def test_function(value, suffix=''):
+    return value.upper() + suffix
