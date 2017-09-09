@@ -1,3 +1,3 @@
 # packspec-py
 
-PackSpec for Python. Docs, issues etc in the main project repository: https://github.com/packspec/packspec
+Cross-language testings made easy: unified YML-based package specification and Python/JavaScript/Ruby/PHP test runners: https://github.com/packspec/packspec
