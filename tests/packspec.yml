@@ -6,7 +6,7 @@
 - class
 
 - class=: {$TestClass}
-- class.static_property==: {value}
+- (py)class.static_property==: {value}
 - class.static_method: [==: {value}]
 
 - instance

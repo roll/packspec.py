@@ -165,7 +165,7 @@ def parse_feature(feature):
     }
 
 
-def test_specs(specs):
+def test_specs(specs, exit_first=False):
 
     # Message
     message = click.style(emojize('\n #  ', use_aliases=True))
@@ -175,13 +175,13 @@ def test_specs(specs):
     # Test specs
     success = True
     for spec in specs:
-        spec_success = test_spec(spec)
+        spec_success = test_spec(spec, exit_first=exit_first)
         success = success and spec_success
 
     return success
 
 
-def test_spec(spec):
+def test_spec(spec, exit_first=False):
 
     # Message
     message = click.style(emojize(':heavy_minus_sign:'*3, use_aliases=True))
@@ -190,7 +190,7 @@ def test_spec(spec):
     # Test spec
     passed = 0
     for feature in spec['features']:
-        passed += test_feature(feature, spec['scope'])
+        passed += test_feature(feature, spec['scope'], exit_first=exit_first)
     success = (passed == spec['stats']['features'])
 
     # Message
@@ -205,7 +205,7 @@ def test_spec(spec):
     return success
 
 
-def test_feature(feature, scope):
+def test_feature(feature, scope, exit_first=False):
 
     # Comment
     if feature['comment']:
@@ -271,6 +271,15 @@ def test_feature(feature, scope):
         else:
             message += click.style('Assertion: %s != %s' % (result_text, json.dumps(feature['result'], ensure_ascii=False)), fg='red', bold=True)
         click.echo(message)
+        if exit_first:
+            click.echo('---')
+            click.echo('Scope (current execution scope):')
+            click.echo(list(scope))
+            if exception:
+                click.echo('---')
+                raise exception
+            else:
+                exit(1)
 
     return success
 
@@ -301,18 +310,6 @@ def dereference_value(value, scope):
     return value
 
 
-def normalize_value(value):
-    if isinstance(value, tuple):
-        value = list(value)
-    elif isinstance(value, dict):
-        for key, item in value.items():
-            value[key] = normalize_value(item)
-    elif isinstance(value, list):
-        for index, item in enumerate(list(value)):
-            value[index] = normalize_value(item)
-    return value
-
-
 def get_property(owner, name):
     if isinstance(owner, dict):
         return owner.get(name)
@@ -331,13 +328,26 @@ def set_property(owner, name, value):
     return setattr(owner, name, value)
 
 
+def normalize_value(value):
+    if isinstance(value, tuple):
+        value = list(value)
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            value[key] = normalize_value(item)
+    elif isinstance(value, list):
+        for index, item in enumerate(list(value)):
+            value[index] = normalize_value(item)
+    return value
+
+
 # Main program
 
 @click.command()
 @click.argument('path', required=False)
-def cli(path):
+@click.option('-x', '--exit-first', is_flag=True)
+def cli(path, exit_first):
     specs = parse_specs(path)
-    success = test_specs(specs)
+    success = test_specs(specs, exit_first=exit_first)
     if not success:
         exit(1)
 
