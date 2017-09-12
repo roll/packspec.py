@@ -50,7 +50,7 @@ setup(
     },
     zip_safe=False,
     long_description=README,
-    description='packspec-py',
+    description='Cross-language testings made easy: unified YML-based package specification and Python/JavaScript/Ruby/PHP test runners',
     author='Evgeny Karev',
     author_email='eskarev@gmail.com',
     url='https://github.com/packspec/packspec-py',
